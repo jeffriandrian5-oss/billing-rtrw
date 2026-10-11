@@ -4851,24 +4851,27 @@ router.post('/whatsapp/test-notification', requireAdminSession, async (req, res)
   res.redirect('/admin/whatsapp');
 });
 
-router.post('/whatsapp/reset', requireAdminSession, (req, res) => {
+router.post('/whatsapp/reset', requireAdminSession, async (req, res) => {
   try {
     const authFolder = getSetting('whatsapp_auth_folder', 'auth_info_baileys');
     const folderPath = path.resolve(__dirname, '..', authFolder);
-    
+    const wa = await import('../services/whatsappBot.mjs');
+
+    // Hentikan socket dulu agar file sesi tidak ditulis ulang saat dihapus
+    await wa.stopWhatsAppBot();
+
     if (fs.existsSync(folderPath)) {
       fs.rmSync(folderPath, { recursive: true, force: true });
       logger.info(`[WA] Session reset by admin. Folder ${authFolder} deleted.`);
-      
-      // Trigger restart bot secara asinkron
-      import('../services/whatsappBot.mjs').then(m => m.restartWhatsAppBot()).catch(e => {
-        logger.error('Failed to trigger WA restart:', e.message);
-      });
-
       req.session._msg = { text: 'Sesi WhatsApp berhasil dihapus. Bot sedang memulai ulang, silakan tunggu QR Code muncul.', type: 'success' };
     } else {
-      req.session._msg = { text: 'Folder sesi tidak ditemukan atau sudah dihapus.', type: 'warning' };
+      req.session._msg = { text: 'Folder sesi tidak ditemukan. Bot dimulai ulang, silakan tunggu QR Code muncul.', type: 'warning' };
     }
+
+    // Selalu mulai ulang bot, termasuk saat status sebelumnya loggedOut
+    wa.restartWhatsAppBot().catch(e => {
+      logger.error('Failed to trigger WA restart:', e.message);
+    });
     res.redirect('/admin/whatsapp');
   } catch (e) {
     logger.error('Failed to reset WA session:', e.message);
