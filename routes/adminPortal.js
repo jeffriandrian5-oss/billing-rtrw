@@ -4868,10 +4868,12 @@ router.post('/whatsapp/reset', requireAdminSession, async (req, res) => {
       req.session._msg = { text: 'Folder sesi tidak ditemukan. Bot dimulai ulang, silakan tunggu QR Code muncul.', type: 'warning' };
     }
 
-    // Selalu mulai ulang bot, termasuk saat status sebelumnya loggedOut
-    wa.restartWhatsAppBot().catch(e => {
-      logger.error('Failed to trigger WA restart:', e.message);
-    });
+    // Mulai ulang bot (termasuk saat status sebelumnya loggedOut), kecuali bot dinonaktifkan
+    if (getSetting('whatsapp_enabled', false)) {
+      wa.restartWhatsAppBot().catch(e => {
+        logger.error('Failed to trigger WA restart:', e.message);
+      });
+    }
     res.redirect('/admin/whatsapp');
   } catch (e) {
     logger.error('Failed to reset WA session:', e.message);
