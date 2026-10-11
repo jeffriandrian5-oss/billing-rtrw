@@ -4825,7 +4825,7 @@ router.post('/whatsapp/auto-billing', requireAdminSession, express.urlencoded({ 
 router.get('/api/whatsapp/status', requireAdmin, async (req, res) => {
     try {
       const { whatsappStatus } = await import('../services/whatsappBot.mjs');
-      res.json(whatsappStatus);
+      res.json({ ...whatsappStatus, enabled: !!getSetting('whatsapp_enabled', false) });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

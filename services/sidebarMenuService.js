@@ -26,6 +26,7 @@ const MENU_DEFINITIONS = [
   { key: 'acs_pro', section: 'main', href: '/admin/acs', icon: 'bi bi-hdd-network', labelKey: 'admin.nav.acs_pro', labelDefault: 'GenieACS Pro', roles: ['admin'], activePages: ['acs_pro'] },
   { key: 'onu_provision', section: 'main', href: '/admin/onu-provision', icon: 'bi bi-hdd-network-fill', labelKey: 'admin.nav.onu_provision', labelDefault: 'ONU Provision', roles: ['admin'], activePages: ['onu_provision'] },
   { key: 'olts', section: 'main', href: '/admin/olts', icon: 'bi bi-hdd-fill', labelKey: 'admin.nav.olt_management', labelDefault: 'Manajemen OLT', roles: ['admin'], activePages: ['olts'] },
+  { key: 'whatsapp', section: 'main', href: '/admin/whatsapp', icon: 'bi bi-whatsapp', labelKey: 'admin.nav.whatsapp', labelDefault: 'WhatsApp', roles: ['admin', 'cashier'], activePages: ['whatsapp'] },
 
   { key: 'customers', section: 'billing', href: '/admin/customers', icon: 'bi bi-people', labelKey: 'admin.nav.customers', labelDefault: 'Pelanggan', roles: ['admin', 'cashier'], bottomNav: true, activePages: ['customers'] },
   { key: 'packages', section: 'billing', href: '/admin/packages', icon: 'bi bi-box-seam', labelKey: 'admin.nav.internet_packages', labelDefault: 'Paket Internet', roles: ['admin', 'cashier'], activePages: ['packages'] },
@@ -69,6 +70,7 @@ const DEFAULT_MENU_STATES = {
   acs_pro: STATE_VISIBLE,
   onu_provision: STATE_VISIBLE,
   olts: STATE_VISIBLE,
+  whatsapp: STATE_VISIBLE,
   customers: STATE_VISIBLE,
   packages: STATE_VISIBLE,
   voucher_packages: STATE_VISIBLE,

@@ -568,6 +568,7 @@ export const whatsappStatus = {
   connection: 'connecting',
   qr: null,
   user: null,
+  lastError: null,
   lastUpdate: getCurrentDateInTimezone()
 };
 
@@ -784,6 +785,7 @@ export async function startWhatsAppBot() {
       whatsappStatus.user = null;
       const code = lastDisconnect?.error?.output?.statusCode;
       const reason = lastDisconnect?.error?.message || '-';
+      whatsappStatus.lastError = { code: code ?? null, reason, at: whatsappStatus.lastUpdate };
       const needRescan = code === DisconnectReason.loggedOut;
       whatsappStatus.connection = needRescan ? 'loggedOut' : 'connecting';
       currentSock = null;
@@ -814,6 +816,7 @@ export async function startWhatsAppBot() {
       whatsappStatus.connection = 'open';
       whatsappStatus.user = sock.user;
       reconnectAttempts = 0;
+      whatsappStatus.lastError = null;
       logger.info('WhatsApp bot terhubung');
 
       if (qrShownSinceStart && !notifiedAdminForQr) {
