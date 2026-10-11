@@ -568,6 +568,7 @@ export const whatsappStatus = {
   connection: 'connecting',
   qr: null,
   user: null,
+  lastError: null,
   lastUpdate: getCurrentDateInTimezone()
 };
 
@@ -689,19 +690,50 @@ export async function sendWA(to, text) {
   }
 }
 
-export async function restartWhatsAppBot() {
-  logger.info('WhatsApp: Memulai ulang bot...');
-  if (currentSock) {
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+
+// Jadwalkan satu start ulang saja (hindari beberapa socket aktif bersamaan,
+// yang membuat WhatsApp saling memutus sesi dengan kode 440).
+function scheduleReconnect(delayMs) {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    startWhatsAppBot().catch((e) => {
+      logger.error('WhatsApp: Gagal memulai bot:', e?.message || e);
+      reconnectAttempts++;
+      scheduleReconnect(Math.min(60000, 3000 * reconnectAttempts));
+    });
+  }, delayMs);
+}
+
+export async function stopWhatsAppBot() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  const oldSock = currentSock;
+  // Lepas socket lama dulu agar event 'close'-nya tidak memicu reconnect kedua
+  currentSock = null;
+  if (oldSock) {
     try {
-      currentSock.end();
+      oldSock.ev.removeAllListeners('connection.update');
+      oldSock.end(undefined);
     } catch (e) {
       logger.error('WhatsApp: Gagal menghentikan socket lama:', e.message);
     }
   }
+}
+
+export async function restartWhatsAppBot() {
+  logger.info('WhatsApp: Memulai ulang bot...');
+  await stopWhatsAppBot();
+  reconnectAttempts = 0;
+  whatsappStatus.connection = 'connecting';
+  whatsappStatus.qr = null;
+  whatsappStatus.user = null;
   // Beri jeda sedikit agar socket lama benar-benar tertutup
-  setTimeout(() => {
-    startWhatsAppBot();
-  }, 1000);
+  scheduleReconnect(1000);
 }
 
 export async function startWhatsAppBot() {
@@ -720,7 +752,8 @@ export async function startWhatsAppBot() {
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
-    getMessage: true,
+    // Baileys butuh fungsi; nilai `true` membuat retry pesan gagal (TypeError)
+    getMessage: async () => undefined,
     logger: pino({ level: 'silent' })
   });
 
@@ -729,6 +762,8 @@ export async function startWhatsAppBot() {
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', (update) => {
+    // Abaikan event dari socket lama yang sudah diganti
+    if (sock !== currentSock) return;
     const { connection, lastDisconnect, qr } = update;
     whatsappStatus.lastUpdate = getCurrentDateInTimezone();
 
@@ -749,22 +784,39 @@ export async function startWhatsAppBot() {
       whatsappStatus.qr = null;
       whatsappStatus.user = null;
       const code = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = code !== DisconnectReason.loggedOut;
-      whatsappStatus.connection = code === DisconnectReason.loggedOut ? 'loggedOut' : 'connecting';
+      const reason = lastDisconnect?.error?.message || '-';
+      whatsappStatus.lastError = { code: code ?? null, reason, at: whatsappStatus.lastUpdate };
+      const needRescan = code === DisconnectReason.loggedOut;
+      whatsappStatus.connection = needRescan ? 'loggedOut' : 'connecting';
+      currentSock = null;
 
-      logger.warn(
-        `WhatsApp terputus (kode ${code}). ` +
-        (code === DisconnectReason.loggedOut
-          ? 'Sesi logout — hapus folder auth dan pindai QR lagi.'
-          : 'Mencoba reconnect dalam 3 detik...')
-      );
-      if (shouldReconnect) {
-        setTimeout(() => startWhatsAppBot(), 3000);
+      if (needRescan) {
+        logger.warn(
+          `WhatsApp terputus (kode ${code}: ${reason}). ` +
+          'Sesi logout — klik Reset Sesi di menu WhatsApp lalu pindai QR lagi.'
+        );
+        return;
       }
+
+      // Restart diminta WA setelah scan QR: sambung ulang segera
+      const delay = code === DisconnectReason.restartRequired
+        ? 500
+        : Math.min(60000, 3000 * Math.max(1, reconnectAttempts));
+      reconnectAttempts++;
+      logger.warn(
+        `WhatsApp terputus (kode ${code}: ${reason}). ` +
+        `Mencoba reconnect dalam ${Math.round(delay / 1000)} detik...` +
+        (code === DisconnectReason.connectionReplaced
+          ? ' (Sesi dipakai instance lain — pastikan aplikasi hanya berjalan 1 proses.)'
+          : '')
+      );
+      scheduleReconnect(delay);
     } else if (connection === 'open') {
       whatsappStatus.qr = null;
       whatsappStatus.connection = 'open';
       whatsappStatus.user = sock.user;
+      reconnectAttempts = 0;
+      whatsappStatus.lastError = null;
       logger.info('WhatsApp bot terhubung');
 
       if (qrShownSinceStart && !notifiedAdminForQr) {
